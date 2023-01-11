@@ -54,6 +54,11 @@ use typed_store::Map;
 
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::AuthorityStore;
+||||||| parent of 540d4833b ([Snapshots] Introduce StateAcumulator)
+use crate::authority::{
+    authority_per_epoch_store::AuthorityPerEpochStore, authority_store::EffectsStore,
+};
+use crate::state_accumulator::{State, StateAccumulatorService};
 use crate::transaction_manager::TransactionManager;
 use crate::{authority::EffectsNotifyRead, checkpoints::CheckpointStore};
 
@@ -78,6 +83,7 @@ pub struct CheckpointExecutor {
     checkpoint_store: Arc<CheckpointStore>,
     authority_store: Arc<AuthorityStore>,
     tx_manager: Arc<TransactionManager>,
+    accumulator: Arc<StateAccumulatorService>,
     config: CheckpointExecutorConfig,
     metrics: Arc<CheckpointExecutorMetrics>,
     pruner_subscriber: mpsc::Sender<CheckpointExecutionMessage>,
@@ -89,6 +95,7 @@ impl CheckpointExecutor {
         checkpoint_store: Arc<CheckpointStore>,
         authority_store: Arc<AuthorityStore>,
         tx_manager: Arc<TransactionManager>,
+        accumulator: Arc<StateAccumulatorService>,
         config: CheckpointExecutorConfig,
         prometheus_registry: &Registry,
         pruner_subscriber: mpsc::Sender<CheckpointExecutionMessage>,
@@ -98,6 +105,7 @@ impl CheckpointExecutor {
             checkpoint_store,
             authority_store,
             tx_manager,
+            accumulator,
             config,
             metrics: CheckpointExecutorMetrics::new(prometheus_registry),
             pruner_subscriber,
@@ -109,12 +117,14 @@ impl CheckpointExecutor {
         checkpoint_store: Arc<CheckpointStore>,
         authority_store: Arc<AuthorityStore>,
         tx_manager: Arc<TransactionManager>,
+        accumulator: Arc<StateAccumulatorService>,
     ) -> Self {
         Self {
             mailbox,
             checkpoint_store,
             authority_store,
             tx_manager,
+            accumulator,
             config: Default::default(),
             metrics: CheckpointExecutorMetrics::new_for_tests(),
             pruner_subscriber: mpsc::channel(2).0,
@@ -315,6 +325,7 @@ impl CheckpointExecutor {
         let authority_store = self.authority_store.clone();
         let checkpoint_store = self.checkpoint_store.clone();
         let tx_manager = self.tx_manager.clone();
+        let accumulator = self.accumulator.clone();
 
         pending.push_back(spawn_monitored_task!(async move {
             let epoch_store = epoch_store.clone();
@@ -325,6 +336,7 @@ impl CheckpointExecutor {
                     checkpoint_store.clone(),
                     &epoch_store,
                     tx_manager.clone(),
+                    accumulator.clone(),
                     local_execution_timeout_sec,
                     &metrics,
                 )
@@ -386,6 +398,7 @@ pub async fn execute_checkpoint(
     checkpoint_store: Arc<CheckpointStore>,
     epoch_store: &AuthorityPerEpochStore,
     transaction_manager: Arc<TransactionManager>,
+    accumulator: Arc<StateAccumulatorService>,
     local_execution_timeout_sec: u64,
     metrics: &Arc<CheckpointExecutorMetrics>,
 ) -> Result<CheckpointExecutionState, SuiError> {
@@ -418,7 +431,8 @@ pub async fn execute_checkpoint(
         epoch_store,
         transaction_manager,
         local_execution_timeout_sec,
-        checkpoint.sequence_number(),
+        checkpoint,
+        accumulator,
     )
     .await
 }
@@ -429,8 +443,10 @@ async fn execute_transactions(
     epoch_store: &AuthorityPerEpochStore,
     transaction_manager: Arc<TransactionManager>,
     log_timeout_sec: u64,
-    checkpoint_sequence: CheckpointSequenceNumber,
+    checkpoint: VerifiedCheckpoint,
+    accumulator: Arc<StateAccumulatorService>,
 ) -> Result<CheckpointExecutionState, SuiError> {
+    let checkpoint_sequence = checkpoint.sequence_number();
     let all_tx_digests: Vec<TransactionDigest> =
         execution_digests.iter().map(|tx| tx.transaction).collect();
 
@@ -518,11 +534,35 @@ async fn execute_transactions(
                         panic!("When executing checkpoint {checkpoint_sequence}, transaction {tx_digest} is expected to have effects digest {expected_effects_digest}, but got {}!", actual_effects.digest());
                     }
                 }
+
                 authority_store.insert_executed_transactions(
                     &all_tx_digests,
                     epoch_store.epoch(),
-                    checkpoint_sequence,
+                    checkpoint.sequence_number(),
                 )?;
+
+                let epoch = epoch_store.epoch();
+                let effects: Vec<TransactionEffects> =
+                    effects.into_iter().map(|fx| fx.data().clone()).collect();
+
+                let state = State {
+                    effects: effects.clone(),
+                    checkpoint_seq_num: checkpoint_sequence,
+                    epoch,
+                    end_of_epoch_flag: checkpoint.next_epoch_committee().is_some(),
+                };
+                accumulator.enqueue(state).await?;
+                // TODO: for now, we block here, as this ensures
+                // that we don't need to handle crash recovery (in
+                // such a case, the checkpoint would get re-executed
+                // and re-enqueued, which is fine). However, for a
+                // checkpoint with 2,000 objects, checkpoint accumulation
+                // could take ~100ms. Therefore we should consider not blocking
+                // here, in which case StateAccumulator needs to be crash tolerant.
+                accumulator
+                    .store
+                    .notify_read_checkpoint_state_digests(vec![checkpoint_sequence])
+                    .await?;
 
                 let execution_state = CheckpointExecutionState {
                     effects,
