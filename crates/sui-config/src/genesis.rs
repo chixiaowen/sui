@@ -581,14 +581,14 @@ impl Builder {
 
         let unsigned_genesis_file = path.join(GENESIS_BUILDER_UNSIGNED_GENESIS_FILE);
         let loaded_genesis = if unsigned_genesis_file.exists() {
-            let unsinged_genesis_bytes = fs::read(unsigned_genesis_file)?;
+            let unsigned_genesis_bytes = fs::read(unsigned_genesis_file)?;
             let loaded_genesis: (
                 CheckpointSummary,
                 CheckpointContents,
                 Transaction,
                 TransactionEffects,
                 Vec<Object>,
-            ) = bcs::from_bytes(&unsinged_genesis_bytes)?;
+            ) = bcs::from_bytes(&unsigned_genesis_bytes)?;
             Some(loaded_genesis)
         } else {
             None
@@ -789,8 +789,7 @@ fn create_genesis_transaction(
         );
 
         let transaction_data = genesis_transaction.data().intent_message.value.clone();
-        let signer = transaction_data.signer();
-        let gas = transaction_data.gas();
+        let (kind, signer, gas) = transaction_data.execution_parts();
         let (inner_temp_store, effects, _execution_error) =
             sui_adapter::execution_engine::execute_transaction_to_effects::<
                 execution_mode::Normal,
@@ -798,9 +797,9 @@ fn create_genesis_transaction(
             >(
                 vec![],
                 temporary_store,
-                transaction_data.kind,
+                kind,
                 signer,
-                gas,
+                &gas,
                 *genesis_transaction.digest(),
                 Default::default(),
                 &move_vm,
@@ -1119,8 +1118,7 @@ mod test {
         );
 
         let transaction_data = genesis_transaction.data().intent_message.value.clone();
-        let signer = transaction_data.signer();
-        let gas = transaction_data.gas();
+        let (kind, signer, gas) = transaction_data.execution_parts();
         let (_inner_temp_store, effects, _execution_error) =
             sui_adapter::execution_engine::execute_transaction_to_effects::<
                 execution_mode::Normal,
@@ -1128,9 +1126,9 @@ mod test {
             >(
                 vec![],
                 temporary_store,
-                transaction_data.kind,
+                kind,
                 signer,
-                gas,
+                &gas,
                 *genesis_transaction.digest(),
                 Default::default(),
                 &move_vm,
