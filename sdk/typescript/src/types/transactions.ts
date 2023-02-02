@@ -199,6 +199,10 @@ export const TransactionEffects = object({
   unwrapped: optional(array(OwnedObjectRef)),
   /** Object Refs of objects now deleted (the old refs) */
   deleted: optional(array(SuiObjectRef)),
+  /** Object Refs of objects that were wrapped in other objects, that are unwrapped and then
+   * deleted in a single transaction.
+   */
+  unwrapped_then_deleted: optional(array(SuiObjectRef)),
   /** Object refs of objects now wrapped in other objects */
   wrapped: optional(array(SuiObjectRef)),
   /**

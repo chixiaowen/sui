@@ -1992,6 +1992,9 @@ pub struct TransactionEffects {
     pub unwrapped: Vec<(ObjectRef, Owner)>,
     /// Object Refs of objects now deleted (the old refs).
     pub deleted: Vec<ObjectRef>,
+    /// Object Refs of objects that were wrapped in other objects, that are unwrapped and then
+    /// deleted in a single transaction.
+    pub unwrapped_then_deleted: Vec<ObjectRef>,
     /// Object refs of objects now wrapped in other objects.
     pub wrapped: Vec<ObjectRef>,
     /// The updated gas object reference. Have a dedicated field for convenient access.
@@ -2018,6 +2021,21 @@ impl TransactionEffects {
                     .iter()
                     .map(|(r, o)| (r, o, WriteKind::Unwrap)),
             )
+    }
+
+    /// Return an iterator that iterates through all deleted objects, including deleted,
+    /// unwrapped_then_deleted, and wrapped objects. In other words, all objects that
+    /// do not exist in the object state after this transaction.
+    pub fn all_deleted(&self) -> impl Iterator<Item = (&ObjectRef, DeleteKind)> + Clone {
+        self.deleted
+            .iter()
+            .map(|r| (r, DeleteKind::Normal))
+            .chain(
+                self.unwrapped_then_deleted
+                    .iter()
+                    .map(|r| (r, DeleteKind::UnwrapThenDelete)),
+            )
+            .chain(self.wrapped.iter().map(|r| (r, DeleteKind::Wrap)))
     }
 
     pub fn execution_digests(&self) -> ExecutionDigests {
@@ -2127,6 +2145,7 @@ impl Default for TransactionEffects {
             mutated: Vec::new(),
             unwrapped: Vec::new(),
             deleted: Vec::new(),
+            unwrapped_then_deleted: Vec::new(),
             wrapped: Vec::new(),
             gas_object: (
                 random_object_ref(),

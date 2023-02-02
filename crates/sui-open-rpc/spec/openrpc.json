@@ -6380,6 +6380,12 @@
               "$ref": "#/components/schemas/OwnedObjectRef"
             }
           },
+          "unwrappedThenDeleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObjectRef"
+            }
+          },
           "wrapped": {
             "type": "array",
             "items": {

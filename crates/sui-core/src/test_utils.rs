@@ -133,6 +133,7 @@ pub fn dummy_transaction_effects(tx: &Transaction) -> TransactionEffects {
         mutated: Vec::new(),
         unwrapped: Vec::new(),
         deleted: Vec::new(),
+        unwrapped_then_deleted: Vec::new(),
         wrapped: Vec::new(),
         gas_object: (
             random_object_ref(),

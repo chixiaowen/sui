@@ -1948,6 +1948,10 @@ pub struct SuiTransactionEffects {
     // Object Refs of objects now deleted (the old refs).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deleted: Vec<SuiObjectRef>,
+    // Object Refs of objects that were wrapped in other objects, that are unwrapped and then
+    // deleted in a single transaction.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unwrapped_then_deleted: Vec<SuiObjectRef>,
     // Object refs of objects now wrapped in other objects.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wrapped: Vec<SuiObjectRef>,
@@ -1981,6 +1985,7 @@ impl SuiTransactionEffects {
             mutated: to_owned_ref(effect.mutated),
             unwrapped: to_owned_ref(effect.unwrapped),
             deleted: to_sui_object_ref(effect.deleted),
+            unwrapped_then_deleted: to_sui_object_ref(effect.unwrapped_then_deleted),
             wrapped: to_sui_object_ref(effect.wrapped),
             gas_object: OwnedObjectRef {
                 owner: effect.gas_object.1,
