@@ -54,7 +54,7 @@ use typed_store::Map;
 
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::AuthorityStore;
-use crate::state_accumulator::{State, StateAccumulator};
+use crate::state_accumulator::StateAccumulator;
 use crate::transaction_manager::TransactionManager;
 use crate::{authority::EffectsNotifyRead, checkpoints::CheckpointStore};
 
@@ -537,14 +537,11 @@ async fn execute_transactions(
                     checkpoint.sequence_number(),
                 )?;
 
-                let checkpoint_seq_num = checkpoint.sequence_number();
-
-                let state = State {
-                    effects: effects.clone(),
-                    checkpoint_seq_num,
-                };
-
-                accumulator.accumulate_checkpoint(state, epoch_store)?;
+                accumulator.accumulate_checkpoint(
+                    effects.clone(),
+                    checkpoint_sequence,
+                    epoch_store,
+                )?;
 
                 let execution_state = CheckpointExecutionState {
                     effects,
