@@ -624,7 +624,7 @@ impl CheckpointBuilder {
 
                 Some(self.accumulator.digest_epoch(
                     &epoch,
-                    sequence_number.clone(),
+                    sequence_number,
                     self.epoch_store.clone(),
                 )?)
             } else {

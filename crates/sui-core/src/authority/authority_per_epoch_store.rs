@@ -407,11 +407,7 @@ impl AuthorityPerEpochStore {
         &self,
         checkpoint: &CheckpointSequenceNumber,
     ) -> SuiResult<Option<Accumulator>> {
-        Ok(self
-            .tables
-            .state_hash_by_checkpoint
-            .get(checkpoint)?
-            .map(|acc| acc.into()))
+        Ok(self.tables.state_hash_by_checkpoint.get(checkpoint)?)
     }
 
     pub fn insert_state_hash_for_checkpoint(

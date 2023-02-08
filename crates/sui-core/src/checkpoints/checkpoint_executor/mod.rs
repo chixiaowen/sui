@@ -442,7 +442,6 @@ async fn execute_transactions(
     checkpoint: VerifiedCheckpoint,
     accumulator: Arc<StateAccumulator>,
 ) -> Result<CheckpointExecutionState, SuiError> {
-    let checkpoint_sequence = checkpoint.sequence_number();
     let all_tx_digests: Vec<TransactionDigest> =
         execution_digests.iter().map(|tx| tx.transaction).collect();
 
@@ -522,6 +521,7 @@ async fn execute_transactions(
             }
             Ok(Err(err)) => return Err(err),
             Ok(Ok(effects)) => {
+                let checkpoint_sequence = checkpoint.sequence_number();
                 for (tx_digest, expected_digest, actual_effects) in
                     izip!(&all_tx_digests, &execution_digests, &effects)
                 {
@@ -534,7 +534,7 @@ async fn execute_transactions(
                 authority_store.insert_executed_transactions(
                     &all_tx_digests,
                     epoch_store.epoch(),
-                    checkpoint.sequence_number(),
+                    checkpoint_sequence,
                 )?;
 
                 accumulator.accumulate_checkpoint(

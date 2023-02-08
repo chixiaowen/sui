@@ -64,9 +64,6 @@ impl StateAccumulator {
         );
 
         // TODO almost certainly not currectly handling "mutated" effects.
-        // TODO(william) the below two operations should be done
-        // atomically, otherwise we may have infinite awaits on the notify
-        // in a crash scenario.
         acc.insert_all(
             effects
                 .iter()
@@ -137,17 +134,14 @@ impl StateAccumulator {
             root_state_hash.union(&acc);
         }
 
-        // TODO(william) the below two operations should be done
-        // atomically, otherwise we may have infinite awaits on the notify
-        // in a crash scenario.
         self.authority_store
             .perpetual_tables
             .root_state_hash_by_epoch
-            .insert(&epoch, &(last_checkpoint_of_epoch, root_state_hash.clone()))?;
+            .insert(epoch, &(last_checkpoint_of_epoch, root_state_hash.clone()))?;
 
         self.authority_store
             .root_state_notify_read
-            .notify(&epoch, &(last_checkpoint_of_epoch, root_state_hash.clone()));
+            .notify(epoch, &(last_checkpoint_of_epoch, root_state_hash.clone()));
 
         Ok(root_state_hash)
     }
