@@ -1,6 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use mysten_metrics::monitored_scope;
 use sui_types::committee::EpochId;
 use typed_store::Map;
 
@@ -32,6 +33,7 @@ impl StateAccumulator {
         checkpoint_seq_num: CheckpointSequenceNumber,
         epoch_store: Arc<AuthorityPerEpochStore>,
     ) -> SuiResult<Accumulator> {
+        let _scope = monitored_scope("AccumulateCheckpoint");
         if let Some(acc) = epoch_store.get_state_hash_for_checkpoint(&checkpoint_seq_num)? {
             return Ok(acc);
         }
@@ -91,7 +93,7 @@ impl StateAccumulator {
     /// underlying data structure not being) as long as it is not called in a multi-threaded
     /// context. Can be called on non-consecutive epochs, e.g. to accumulate epoch 3 after
     /// having last accumulated epoch 1.
-    pub fn accumulate_epoch(
+    pub async fn accumulate_epoch(
         &self,
         epoch: &EpochId,
         last_checkpoint_of_epoch: CheckpointSequenceNumber,
@@ -126,8 +128,21 @@ impl StateAccumulator {
             })
             .unwrap_or((0, (0, Accumulator::default())));
 
-        let accumulators = epoch_store
-            .get_accumulators_in_checkpoint_range(next_to_accumulate, last_checkpoint_of_epoch)?;
+        let (checkpoints, mut accumulators) = epoch_store
+            .get_accumulators_in_checkpoint_range(next_to_accumulate, last_checkpoint_of_epoch)?
+            .into_iter()
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        let remaining_checkpoints: Vec<_> = (next_to_accumulate..=last_checkpoint_of_epoch)
+            .filter(|seq_num| !checkpoints.contains(seq_num))
+            .collect();
+
+        let mut remaining_accumulators = epoch_store
+            .notify_read_checkpoint_state_digests(remaining_checkpoints)
+            .await
+            .expect("Failed to notify read checkpoint state digests");
+
+        accumulators.append(&mut remaining_accumulators);
         assert!(accumulators.len() == (last_checkpoint_of_epoch - next_to_accumulate + 1) as usize);
 
         for acc in accumulators {
@@ -146,14 +161,15 @@ impl StateAccumulator {
         Ok(root_state_hash)
     }
 
-    pub fn digest_epoch(
+    pub async fn digest_epoch(
         &self,
         epoch: &EpochId,
         last_checkpoint_of_epoch: CheckpointSequenceNumber,
         epoch_store: Arc<AuthorityPerEpochStore>,
     ) -> Result<Digest<32>, TypedStoreError> {
         Ok(self
-            .accumulate_epoch(epoch, last_checkpoint_of_epoch, epoch_store)?
+            .accumulate_epoch(epoch, last_checkpoint_of_epoch, epoch_store)
+            .await?
             .digest())
     }
 }

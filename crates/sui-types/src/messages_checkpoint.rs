@@ -62,6 +62,11 @@ pub struct EndOfEpochData {
     /// The protocol version that is in effect during the epoch that starts immediately after this
     /// checkpoint.
     pub next_epoch_protocol_version: ProtocolVersion,
+
+    /// The digest of the union of all checkpoint accumulators,
+    /// representing the state of the system at the end of the epoch.
+    #[schemars(with = "[u8; 32]")]
+    pub root_state_digest: Digest<32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
@@ -76,12 +81,6 @@ pub struct CheckpointSummary {
     /// The running total gas costs of all transactions included in the current epoch so far
     /// until this checkpoint.
     pub epoch_rolling_gas_cost_summary: GasCostSummary,
-
-    /// The digest of the union of all checkpoint accumulators,
-    /// representing the state of the system at the end of the epoch.
-    /// None if this is not the last checkpoint of the epoch
-    #[schemars(with = "Option<[u8; 32]>")]
-    pub root_state_digest: Option<Digest<32>>,
 
     /// Timestamp of the checkpoint - number of milliseconds from the Unix epoch
     /// Checkpoint timestamps are monotonic, but not strongly monotonic - subsequent
@@ -106,8 +105,7 @@ impl CheckpointSummary {
         transactions: &CheckpointContents,
         previous_digest: Option<CheckpointDigest>,
         epoch_rolling_gas_cost_summary: GasCostSummary,
-        next_epoch_committee: Option<Committee>,
-        root_state_digest: Option<Digest<32>>,
+        end_of_epoch_data: Option<EndOfEpochData>,
         timestamp_ms: CheckpointTimestamp,
     ) -> CheckpointSummary {
         let content_digest = transactions.digest();
@@ -119,11 +117,7 @@ impl CheckpointSummary {
             content_digest,
             previous_digest,
             epoch_rolling_gas_cost_summary,
-            end_of_epoch_data: next_epoch_committee.map(|c| EndOfEpochData {
-                next_epoch_committee: c.voting_rights,
-                next_epoch_protocol_version: c.protocol_version,
-            }),
-            root_state_digest,
+            end_of_epoch_data,
             timestamp_ms,
             version_specific_data: Vec::new(),
         }
@@ -216,8 +210,7 @@ impl SignedCheckpointSummary {
         transactions: &CheckpointContents,
         previous_digest: Option<CheckpointDigest>,
         epoch_rolling_gas_cost_summary: GasCostSummary,
-        next_epoch_committee: Option<Committee>,
-        root_state_digest: Option<Digest<32>>,
+        end_of_epoch_data: Option<EndOfEpochData>,
         timestamp_ms: CheckpointTimestamp,
     ) -> SignedCheckpointSummary {
         let checkpoint = CheckpointSummary::new(
@@ -227,8 +220,7 @@ impl SignedCheckpointSummary {
             transactions,
             previous_digest,
             epoch_rolling_gas_cost_summary,
-            next_epoch_committee,
-            root_state_digest,
+            end_of_epoch_data,
             timestamp_ms,
         );
         SignedCheckpointSummary::new_from_summary(checkpoint, authority, signer)
@@ -523,7 +515,6 @@ mod tests {
                     None,
                     GasCostSummary::default(),
                     None,
-                    None,
                     0,
                 )
             })
@@ -563,7 +554,6 @@ mod tests {
                     None,
                     GasCostSummary::default(),
                     None,
-                    None,
                     0,
                 )
             })
@@ -593,7 +583,6 @@ mod tests {
                     &set,
                     None,
                     GasCostSummary::default(),
-                    None,
                     None,
                     0,
                 )

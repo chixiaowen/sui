@@ -100,7 +100,6 @@ pub fn mock_certified_checkpoint<'a>(
                 None,
                 GasCostSummary::default(),
                 None,
-                None,
                 0,
             )
         })

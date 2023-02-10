@@ -522,14 +522,13 @@ impl AuthorityPerEpochStore {
         &self,
         from_checkpoint: CheckpointSequenceNumber,
         to_checkpoint: CheckpointSequenceNumber,
-    ) -> Result<Vec<Accumulator>, TypedStoreError> {
+    ) -> Result<Vec<(CheckpointSequenceNumber, Accumulator)>, TypedStoreError> {
         Ok(self
             .tables
             .state_hash_by_checkpoint
             .iter()
             .skip_to(&from_checkpoint)?
             .take_while(|(checkpoint, _)| *checkpoint <= to_checkpoint)
-            .map(|(_, acc)| acc)
             .collect())
     }
 

@@ -748,7 +748,6 @@ fn create_genesis_checkpoint(
         previous_digest: None,
         epoch_rolling_gas_cost_summary: Default::default(),
         end_of_epoch_data: None,
-        root_state_digest: None,
         timestamp_ms: parameters.timestamp_ms,
         version_specific_data: Vec::new(),
     };

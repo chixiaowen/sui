@@ -364,6 +364,7 @@ fn check_epoch_last_checkpoint(
             if let Some(EndOfEpochData {
                 next_epoch_committee,
                 next_epoch_protocol_version,
+                ..
             }) = &checkpoint.summary.end_of_epoch_data
             {
                 info!(

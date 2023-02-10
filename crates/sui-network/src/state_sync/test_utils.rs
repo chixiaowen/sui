@@ -64,7 +64,6 @@ impl CommitteeFixture {
             previous_digest: None,
             epoch_rolling_gas_cost_summary: Default::default(),
             end_of_epoch_data: None,
-            root_state_digest: None,
             timestamp_ms: 0,
             version_specific_data: Vec::new(),
         };
@@ -122,7 +121,6 @@ impl CommitteeFixture {
                 previous_digest: Some(prev.summary.digest()),
                 epoch_rolling_gas_cost_summary: Default::default(),
                 end_of_epoch_data: None,
-                root_state_digest: None,
                 timestamp_ms: 0,
                 version_specific_data: Vec::new(),
             };
@@ -167,7 +165,6 @@ impl CommitteeFixture {
             previous_digest: Some(previous_checkpoint.summary.digest()),
             epoch_rolling_gas_cost_summary: Default::default(),
             end_of_epoch_data,
-            root_state_digest: None,
             timestamp_ms: 0,
             version_specific_data: Vec::new(),
         };

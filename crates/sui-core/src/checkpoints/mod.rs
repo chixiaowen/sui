@@ -15,11 +15,13 @@ pub use crate::checkpoints::checkpoint_output::{
 pub use crate::checkpoints::metrics::CheckpointMetrics;
 use crate::stake_aggregator::{InsertResult, StakeAggregator};
 use crate::state_accumulator::StateAccumulator;
+use fastcrypto::hash::MultisetHash;
 use futures::future::{select, Either};
 use futures::FutureExt;
 use mysten_metrics::{monitored_scope, spawn_monitored_task, MonitoredFutureExt};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use sui_types::accumulator::Accumulator;
 
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority_aggregator::TransactionCertifier;
@@ -36,7 +38,8 @@ use sui_types::gas::GasCostSummary;
 use sui_types::messages::TransactionEffects;
 use sui_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointContents, CheckpointSequenceNumber,
-    CheckpointSignatureMessage, CheckpointSummary, CheckpointTimestamp, VerifiedCheckpoint,
+    CheckpointSignatureMessage, CheckpointSummary, CheckpointTimestamp, EndOfEpochData,
+    VerifiedCheckpoint,
 };
 use tokio::sync::{mpsc, watch, Notify};
 use tokio::time::Instant;
@@ -606,6 +609,13 @@ impl CheckpointBuilder {
 
             let epoch_rolling_gas_cost_summary =
                 self.get_epoch_total_gas_cost(last_checkpoint.as_ref().map(|(_, c)| c), &effects);
+
+            self.accumulator.accumulate_checkpoint(
+                effects.clone(),
+                sequence_number,
+                self.epoch_store.clone(),
+            )?;
+
             if last_checkpoint_of_epoch {
                 self.augment_epoch_last_checkpoint(
                     &epoch_rolling_gas_cost_summary,
@@ -614,25 +624,6 @@ impl CheckpointBuilder {
                 )
                 .await?;
             }
-
-            let root_state_digest = if last_checkpoint_of_epoch {
-                self.accumulator.accumulate_checkpoint(
-                    effects.clone(),
-                    sequence_number,
-                    self.epoch_store.clone(),
-                )?;
-
-                Some(self.accumulator.digest_epoch(
-                    &epoch,
-                    sequence_number,
-                    self.epoch_store.clone(),
-                )?)
-            } else {
-                None
-            };
-
-            // for now, just log this value, and insert None into the checkpoint summary
-            info!("Epoch {epoch} root state hash digest: {root_state_digest:?}");
 
             let contents =
                 CheckpointContents::new_with_causally_ordered_transactions_and_signatures(
@@ -656,17 +647,30 @@ impl CheckpointBuilder {
                 previous_digest,
                 epoch_rolling_gas_cost_summary,
                 if last_checkpoint_of_epoch {
-                    Some(
-                        self.state
-                            .get_sui_system_state_object()
-                            .unwrap()
-                            .get_current_epoch_committee()
-                            .committee,
-                    )
+                    let committee = self
+                        .state
+                        .get_sui_system_state_object()
+                        .unwrap()
+                        .get_current_epoch_committee()
+                        .committee;
+                    let root_state_digest = Some(
+                        self.accumulator
+                            .digest_epoch(&epoch, sequence_number, self.epoch_store.clone())
+                            .in_monitored_scope("CheckpointBuilder::digest_epoch")
+                            .await?,
+                    );
+
+                    // for now, just log this value, and insert default val into checkpoint summary
+                    info!("Epoch {epoch} root state hash digest: {root_state_digest:?}");
+
+                    Some(EndOfEpochData {
+                        next_epoch_committee: committee.voting_rights,
+                        next_epoch_protocol_version: committee.protocol_version,
+                        root_state_digest: Accumulator::default().digest(),
+                    })
                 } else {
                     None
                 },
-                None, // root_state_digest
                 timestamp_ms,
             );
             if last_checkpoint_of_epoch {
