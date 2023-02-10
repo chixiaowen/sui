@@ -964,7 +964,7 @@ export class JsonRpcProvider extends Provider {
 
   async getDynamicFieldObject(
     parent_object_id: ObjectId,
-    name: DynamicFieldName
+    name: DynamicFieldName,
   ): Promise<GetObjectDataResponse> {
     try {
       const resp = await this.client.requestWithType(

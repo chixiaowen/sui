@@ -20,9 +20,9 @@ export type DynamicFieldType = Infer<typeof DynamicFieldType>;
 
 export const DynamicFieldName = object({
   type: string(),
-  value: object()
-})
-export type DynamicFieldName = Infer< typeof DynamicFieldName >;
+  value: object(),
+});
+export type DynamicFieldName = Infer<typeof DynamicFieldName>;
 
 export const DynamicFieldInfo = object({
   name: DynamicFieldName,
