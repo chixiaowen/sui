@@ -1,28 +1,20 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use reqwest::Client;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::net::SocketAddr;
-use std::path::Path;
-use std::str::FromStr;
-use std::time::Duration;
-use sui_config::utils;
+use serde_json::json;
+
+use crate::rosetta_client::{start_rosetta_test_server, RosettaEndpoint};
 use sui_keys::keystore::AccountKeystore;
 use sui_rosetta::types::{
     AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, NetworkIdentifier,
     SubAccount, SubAccountType, SuiEnv,
 };
-use sui_rosetta::RosettaOnlineServer;
 use sui_sdk::json::SuiJsonValue;
-use sui_sdk::SuiClient;
 use sui_types::utils::to_sender_signed_transaction;
 use sui_types::{parse_sui_type_tag, SUI_FRAMEWORK_OBJECT_ID};
 use test_utils::network::TestClusterBuilder;
-use tokio::task::JoinHandle;
 
+mod rosetta_client;
 #[tokio::test]
 async fn test_locked_sui() {
     let test_cluster = TestClusterBuilder::new().build().await.unwrap();
@@ -60,7 +52,9 @@ async fn test_locked_sui() {
         block_identifier: Default::default(),
         currencies: vec![],
     };
-    let response: AccountBalanceResponse = rosetta_client.call("account/balance", &request).await;
+    let response: AccountBalanceResponse = rosetta_client
+        .call(RosettaEndpoint::Balance, &request)
+        .await;
     assert_eq!(response.balances[0].value, 0);
 
     // Lock some sui
@@ -103,7 +97,9 @@ async fn test_locked_sui() {
         block_identifier: Default::default(),
         currencies: vec![],
     };
-    let response: AccountBalanceResponse = rosetta_client.call("account/balance", &request).await;
+    let response: AccountBalanceResponse = rosetta_client
+        .call(RosettaEndpoint::Balance, &request)
+        .await;
     assert_eq!(1, response.balances.len());
     assert_eq!(
         100,
@@ -141,7 +137,9 @@ async fn test_get_delegated_sui() {
         currencies: vec![],
     };
 
-    let response: AccountBalanceResponse = rosetta_client.call("account/balance", &request).await;
+    let response: AccountBalanceResponse = rosetta_client
+        .call(RosettaEndpoint::Balance, &request)
+        .await;
     assert_eq!(1, response.balances.len());
     assert_eq!(500000000000000, response.balances[0].value);
 
@@ -156,7 +154,9 @@ async fn test_get_delegated_sui() {
         block_identifier: Default::default(),
         currencies: vec![],
     };
-    let response: AccountBalanceResponse = rosetta_client.call("account/balance", &request).await;
+    let response: AccountBalanceResponse = rosetta_client
+        .call(RosettaEndpoint::Balance, &request)
+        .await;
     assert_eq!(response.balances[0].value, 0);
 
     // Delegate some sui
@@ -197,53 +197,11 @@ async fn test_get_delegated_sui() {
         block_identifier: Default::default(),
         currencies: vec![],
     };
-    let response: AccountBalanceResponse = rosetta_client.call("account/balance", &request).await;
+    let response: AccountBalanceResponse = rosetta_client
+        .call(RosettaEndpoint::Balance, &request)
+        .await;
     assert_eq!(1, response.balances.len());
     assert_eq!(100000, response.balances[0].value);
 
     // TODO: add DelegatedSui test when we can advance epoch.
-}
-
-async fn start_rosetta_test_server(
-    client: SuiClient,
-    dir: &Path,
-) -> (RosettaClient, JoinHandle<hyper::Result<()>>) {
-    let rosetta_server =
-        RosettaOnlineServer::new(SuiEnv::LocalNet, client, &dir.join("rosetta_data"));
-    let local_ip = utils::get_local_ip_for_tests().to_string();
-    let port = utils::get_available_port(&local_ip);
-    let rosetta_address = format!("{}:{}", local_ip, port);
-    let _handle = rosetta_server.serve(SocketAddr::from_str(&rosetta_address).unwrap());
-
-    // wait for rosetta to process the genesis block.
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    (RosettaClient::new(port), _handle)
-}
-
-struct RosettaClient {
-    client: Client,
-    port: u16,
-}
-
-impl RosettaClient {
-    fn new(port: u16) -> Self {
-        let client = Client::new();
-        Self { client, port }
-    }
-    async fn call<R: Serialize, T: DeserializeOwned>(&self, endpoint: &str, request: &R) -> T {
-        let response = self
-            .client
-            .post(format!("http://127.0.0.1:{}/{endpoint}", self.port))
-            .json(&json!(request))
-            .send()
-            .await
-            .unwrap();
-
-        let json: Value = response.json().await.unwrap();
-        if let Ok(v) = serde_json::from_value(json.clone()) {
-            v
-        } else {
-            panic!("Failed to deserialize json value: {json:#?}")
-        }
-    }
 }
