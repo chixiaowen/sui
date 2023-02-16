@@ -10,6 +10,7 @@
 module sui::dynamic_field {
 
 use sui::object::{Self, ID, UID};
+#[verify_only]
 use sui::prover;
 
 friend sui::dynamic_object_field;
@@ -59,18 +60,42 @@ public fun add<Name: copy + drop + store, Value: store>(
 
 spec add {
     pragma opaque;
-    aborts_if [abstract] prover::uid_has_field(object, name);
-    modifies [abstract] global<object::DynamicFields<Name>>(object::uid_to_address(object));
-    ensures [abstract] object == old(object);
-    ensures [abstract] exists<object::DynamicFields<Name>>(object::uid_to_address(object));
-    ensures [abstract] (!old(exists<object::DynamicFields<Name>>(object::uid_to_address(object))))
-        ==> global<object::DynamicFields<Name>>(object::uid_to_address(object)).names == vec(name);
-    ensures [abstract] old(exists<object::DynamicFields<Name>>(object::uid_to_address(object)))
-        ==> global<object::DynamicFields<Name>>(object::uid_to_address(object)).names == old(concat(
-                global<object::DynamicFields<Name>>(object::uid_to_address(object)).names,
+
+    let addr  = object.id.bytes;
+
+    // the function aborts when the key already exists
+    aborts_if [abstract] exists<NameShard<Name>>(addr) &&
+        contains(global<NameShard<Name>>(addr).names, name);
+
+    // this function, upon completion, will update the shards
+    modifies [abstract] global<NameShard<Name>>(addr);
+    modifies [abstract] global<PairShard<Name, Value>>(addr);
+
+    // function preserves object ID
+    ensures [abstract] object.id == old(object.id);
+
+    // update to the name shard
+    ensures [abstract] exists<NameShard<Name>>(addr);
+    ensures [abstract] (!old(exists<NameShard<Name>>(addr)))
+        ==> global<NameShard<Name>>(addr).names == vec(name);
+    ensures [abstract] old(exists<NameShard<Name>>(addr))
+        ==> global<NameShard<Name>>(addr).names == concat(
+                old(global<NameShard<Name>>(addr).names),
                 vec(name)
-            ));
-    }
+            );
+
+    // update to the kv-pair shard
+    ensures [abstract] exists<PairShard<Name, Value>>(addr);
+    ensures [abstract] (!old(exists<PairShard<Name, Value>>(addr)))
+        ==> global<PairShard<Name, Value>>(addr).entries == prover::map_set(
+                prover::map_new(), name, value
+            );
+    ensures [abstract] old(exists<NameShard<Name>>(addr))
+        ==> global<PairShard<Name, Value>>(addr).entries == prover::map_set(
+                old(global<PairShard<Name, Value>>(addr).entries),
+                name, value
+            );
+}
 
 /// Immutably borrows the `object`s dynamic field with the name specified by `name: Name`.
 /// Aborts with `EFieldDoesNotExist` if the object does not have a field with that name.
@@ -128,17 +153,40 @@ public fun remove<Name: copy + drop + store, Value: store>(
 
 spec remove {
     pragma opaque;
-    aborts_if [abstract] !prover::uid_has_field(object, name);
-    modifies [abstract] global<object::DynamicFields<Name>>(object::uid_to_address(object));
+
+    let addr  = object.id.bytes;
+
+    // the function aborts when the key does not exist
+    aborts_if [abstract] !exists<NameShard<Name>>(addr);
+    aborts_if [abstract] exists<NameShard<Name>>(addr) &&
+        !contains(global<NameShard<Name>>(addr).names, name);
+
+    // the function aborts when the key exists but value type does not match
+    aborts_if [abstract] exists<NameShard<Name>>(addr) &&
+        contains(global<NameShard<Name>>(addr).names, name) &&
+        !exists<PairShard<Name, Value>>(addr);
+    aborts_if [abstract] exists<NameShard<Name>>(addr) &&
+        contains(global<NameShard<Name>>(addr).names, name) &&
+        exists<PairShard<Name, Value>>(addr) &&
+        prover::map_contains(global<PairShard<Name, Value>>(addr).entries, name);
+
+    // this function, upon completion, will update the shards
+    modifies [abstract] global<NameShard<Name>>(addr);
+    modifies [abstract] global<PairShard<Name, Value>>(addr);
+
+    // function preserves object ID
     ensures [abstract] object.id == old(object.id);
-    ensures [abstract] old(prover::uid_num_fields<Name>(object)) == 1
-        ==> !exists<object::DynamicFields<Name>>(object::uid_to_address(object));
-    ensures [abstract] old(prover::uid_num_fields<Name>(object)) > 1
-        ==> global<object::DynamicFields<Name>>(object::uid_to_address(object)).names ==
-                old(prover::vec_remove(global<object::DynamicFields<Name>>(object::uid_to_address(object)).names,
-                    index_of(global<object::DynamicFields<Name>>(object::uid_to_address(object)).names, name)));
-    // this is needed to ensure that there was only one field with a given name
-    ensures [abstract] !prover::uid_has_field(object, name);
+
+    // update to the name shard
+    ensures [abstract] global<NameShard<Name>>(addr).names == prover::vec_remove(
+        old(global<NameShard<Name>>(addr).names),
+        index_of(old(global<NameShard<Name>>(addr).names), name)
+    );
+
+    // update to the kv-pair shard
+    ensures [abstract] global<PairShard<Name, Value>>(addr).entries == prover::map_del(
+        old(global<PairShard<Name, Value>>(addr).entries), name
+    );
 }
 
 
@@ -250,6 +298,18 @@ spec has_child_object_with_ty {
     // TODO: stub to be replaced by actual abort conditions if any
     aborts_if [abstract] true;
     // TODO: specify actual function behavior
+}
+
+#[verify_only]
+/// A slice of the dynamic fields associated with an object sharded by K type.
+struct NameShard<Name: copy + drop + store> has key {
+    names: vector<Name>,
+}
+
+#[verify_only]
+/// A slice of the dynamic fields associated with an object sharded by K-V type.
+struct PairShard<phantom Name: copy + drop + store, phantom Value: store> has key {
+    entries: prover::Map<Name, Value>,
 }
 
 }
