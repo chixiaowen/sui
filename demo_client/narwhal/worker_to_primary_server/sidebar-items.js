@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["SendMessageSvc","WorkerToPrimaryServer","_Inner"],"trait":["WorkerToPrimary"]};

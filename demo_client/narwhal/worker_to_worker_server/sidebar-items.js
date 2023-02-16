@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ClientBatchRequestSvc","SendMessageSvc","WorkerToWorkerServer","_Inner"],"trait":["WorkerToWorker"]};

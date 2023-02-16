@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["id","next_cursor_tx_digest","star"]};

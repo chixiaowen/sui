@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AggrAuthSignature","AuthSignature","KeyPairBase64","Readable","SuiBitmap"]};

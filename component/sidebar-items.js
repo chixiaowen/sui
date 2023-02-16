@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Supervisor"],"trait":["Manageable"],"type":["IrrecoverableError"]};

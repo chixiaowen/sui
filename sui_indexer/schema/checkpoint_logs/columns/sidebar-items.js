@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["next_cursor_sequence_number","star"]};

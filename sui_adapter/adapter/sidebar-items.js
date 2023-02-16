@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["execute","generate_package_id","new_move_vm","new_session","publish","resolve_and_type_check","store_package_and_init_modules","verify_and_link"],"struct":["MoveVM","TypeCheckSuccess"]};
