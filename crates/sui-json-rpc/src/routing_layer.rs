@@ -68,7 +68,7 @@ where
         // https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let res_fut = async move {
-            // Parse request to retrieve RPC method name.
+            // Get version from header.
             let version = req
                 .headers()
                 .get("client_api_version")
