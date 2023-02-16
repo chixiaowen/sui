@@ -2499,6 +2499,7 @@ async fn test_authority_persist() {
         let epoch_store = AuthorityPerEpochStore::new(
             name,
             committee,
+            1, // TODO: determine RGP
             &epoch_store_path,
             None,
             EpochMetrics::new(&registry),
@@ -4130,6 +4131,7 @@ async fn test_tallying_rule_score_updates() {
     let epoch_store = AuthorityPerEpochStore::new(
         auth_0_name,
         committee.clone(),
+        1, // TODO: determine RGP
         &epoch_store_path,
         None,
         metrics.clone(),

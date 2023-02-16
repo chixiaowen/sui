@@ -111,6 +111,9 @@ pub struct AuthorityPerEpochStore {
     /// ok because this is used for metric purposes and we could tolerate some skews occasionally.
     epoch_open_time: Instant,
 
+    /// The Reference Gas Price (RGP) agreed by all validators and store in `SuiSystemState`
+    reference_gas_price: u64,
+
     /// The moment when epoch is closed. We don't care much about crash recovery because it's
     /// a metric that doesn't have to be available for each epoch, and it's only used during
     /// the last few seconds of an epoch.
@@ -279,6 +282,7 @@ impl AuthorityPerEpochStore {
     pub fn new(
         name: AuthorityName,
         committee: Committee,
+        reference_gas_price: u64,
         parent_path: &Path,
         db_options: Option<Options>,
         metrics: Arc<EpochMetrics>,
@@ -335,6 +339,7 @@ impl AuthorityPerEpochStore {
             end_of_publish: Mutex::new(end_of_publish),
             pending_consensus_certificates: Mutex::new(pending_consensus_certificates),
             wal,
+            reference_gas_price,
             epoch_open_time: current_time,
             epoch_close_time: Default::default(),
             metrics,
@@ -357,6 +362,7 @@ impl AuthorityPerEpochStore {
         &self,
         name: AuthorityName,
         new_committee: Committee,
+        reference_gas_price: u64,
         epoch_start_configuration: EpochStartConfiguration,
     ) -> Arc<Self> {
         assert_eq!(self.epoch() + 1, new_committee.epoch);
@@ -365,6 +371,7 @@ impl AuthorityPerEpochStore {
         Self::new(
             name,
             new_committee,
+            reference_gas_price,
             &self.parent_path,
             self.db_options.clone(),
             self.metrics.clone(),
@@ -386,6 +393,10 @@ impl AuthorityPerEpochStore {
 
     pub fn epoch(&self) -> EpochId {
         self.committee.epoch
+    }
+
+    pub fn reference_gas_price(&self) -> u64 {
+        self.reference_gas_price
     }
 
     pub async fn acquire_tx_guard(&self, cert: &VerifiedCertificate) -> SuiResult<CertTxGuard> {

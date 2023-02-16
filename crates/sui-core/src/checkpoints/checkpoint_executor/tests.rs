@@ -175,6 +175,7 @@ pub async fn test_checkpoint_executor_cross_epoch() {
             &authority_state.epoch_store_for_testing(),
             second_committee.committee().clone(),
             0,
+            1, // TODO: determine RGP
         )
         .await
         .unwrap();

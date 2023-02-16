@@ -467,6 +467,7 @@ impl AuthorityState {
         let (_gas_status, input_objects) = transaction_input_checker::check_transaction_input(
             &self.database,
             &transaction.data().intent_message.value,
+            epoch_store.reference_gas_price(),
         )
         .await?;
 
@@ -1041,9 +1042,12 @@ impl AuthorityState {
             return Err(anyhow!("dry-exec is only support on fullnodes"));
         }
 
-        let (gas_status, input_objects) =
-            transaction_input_checker::check_transaction_input(&self.database, &transaction)
-                .await?;
+        let (gas_status, input_objects) = transaction_input_checker::check_transaction_input(
+            &self.database,
+            &transaction,
+            epoch_store.reference_gas_price(),
+        )
+        .await?;
         let shared_object_refs = input_objects.filter_shared_objects();
 
         let transaction_dependencies = input_objects.transaction_dependencies();
@@ -1527,12 +1531,12 @@ impl AuthorityState {
             secret,
             _native_functions: native_functions,
             move_vm,
-            epoch_store: ArcSwap::new(epoch_store.clone()),
-            database: store.clone(),
-            indexes,
             // `module_cache` uses a separate in-mem cache from `event_handler`
             // this is because they largely deal with different types of MoveStructs
             module_cache,
+            epoch_store: ArcSwap::new(epoch_store.clone()),
+            database: store.clone(),
+            indexes,
             event_handler,
             checkpoint_store,
             committee_store,
@@ -1603,6 +1607,7 @@ impl AuthorityState {
         let epoch_store = AuthorityPerEpochStore::new(
             name,
             genesis_committee.clone(),
+            1, // TODO: determine the RGP
             &path.join("store"),
             None,
             EpochMetrics::new(&registry),
@@ -1735,6 +1740,7 @@ impl AuthorityState {
         &self,
         cur_epoch_store: &AuthorityPerEpochStore,
         new_committee: Committee,
+        reference_gas_price: u64,
         epoch_start_timestamp_ms: u64,
     ) -> SuiResult<Arc<AuthorityPerEpochStore>> {
         self.committee_store.insert_new_committee(&new_committee)?;
@@ -1744,7 +1750,12 @@ impl AuthorityState {
             .await?;
         let new_epoch = new_committee.epoch;
         let new_epoch_store = self
-            .reopen_epoch_db(cur_epoch_store, new_committee, epoch_start_timestamp_ms)
+            .reopen_epoch_db(
+                cur_epoch_store,
+                new_committee,
+                reference_gas_price,
+                epoch_start_timestamp_ms,
+            )
             .await?;
         assert_eq!(new_epoch_store.epoch(), new_epoch);
         self.transaction_manager.reconfigure(new_epoch);
@@ -2556,6 +2567,7 @@ impl AuthorityState {
         &self,
         cur_epoch_store: &AuthorityPerEpochStore,
         new_committee: Committee,
+        reference_gas_price: u64,
         epoch_start_timestamp_ms: u64,
     ) -> SuiResult<Arc<AuthorityPerEpochStore>> {
         let new_epoch = new_committee.epoch;
@@ -2564,8 +2576,12 @@ impl AuthorityState {
         let epoch_start_configuration = EpochStartConfiguration {
             epoch_start_timestamp_ms,
         };
-        let new_epoch_store =
-            cur_epoch_store.new_at_next_epoch(self.name, new_committee, epoch_start_configuration);
+        let new_epoch_store = cur_epoch_store.new_at_next_epoch(
+            self.name,
+            new_committee,
+            reference_gas_price,
+            epoch_start_configuration,
+        );
         self.db().perpetual_tables.set_recovery_epoch(new_epoch)?;
         self.epoch_store.store(new_epoch_store.clone());
         cur_epoch_store.epoch_terminated().await;

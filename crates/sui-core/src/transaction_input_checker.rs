@@ -51,6 +51,7 @@ async fn get_gas_status(
 pub async fn check_transaction_input(
     store: &AuthorityStore,
     transaction: &TransactionData,
+    _reference_gas_price: u64,
 ) -> SuiResult<(SuiGasStatus<'static>, InputObjects)> {
     transaction
         .validity_check()

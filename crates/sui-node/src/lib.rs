@@ -139,6 +139,7 @@ impl SuiNode {
 
         let secret = Arc::pin(config.protocol_key_pair().copy());
         let genesis_committee = genesis.committee()?;
+        let reference_gas_price = genesis.sui_system_object().reference_gas_price;
         let committee_store = Arc::new(CommitteeStore::new(
             config.db_path().join("epochs"),
             &genesis_committee,
@@ -163,6 +164,7 @@ impl SuiNode {
         let epoch_store = AuthorityPerEpochStore::new(
             config.protocol_public_key(),
             committee,
+            reference_gas_price,
             &config.db_path().join("store"),
             None,
             EpochMetrics::new(&registry_service.default_registry()),
@@ -790,6 +792,7 @@ impl SuiNode {
                     .reconfigure_state(
                         &cur_epoch_store,
                         next_epoch_committee,
+                        system_state.reference_gas_price,
                         system_state.epoch_start_timestamp_ms,
                     )
                     .await;
@@ -825,6 +828,7 @@ impl SuiNode {
                     .reconfigure_state(
                         &cur_epoch_store,
                         next_epoch_committee,
+                        system_state.reference_gas_price,
                         system_state.epoch_start_timestamp_ms,
                     )
                     .await;
@@ -856,6 +860,7 @@ impl SuiNode {
         &self,
         cur_epoch_store: &AuthorityPerEpochStore,
         next_epoch_committee: Committee,
+        reference_gas_price: u64,
         epoch_start_timestamp_ms: u64,
     ) -> Arc<AuthorityPerEpochStore> {
         let next_epoch = next_epoch_committee.epoch();
@@ -864,6 +869,7 @@ impl SuiNode {
             .reconfigure(
                 cur_epoch_store,
                 next_epoch_committee,
+                reference_gas_price,
                 epoch_start_timestamp_ms,
             )
             .await
