@@ -434,7 +434,8 @@
         "schema": {
           "$ref": "#/components/schemas/SuiExecuteTransactionResponse"
         }
-      }
+      },
+      "deprecated": true
     },
     {
       "name": "sui_getAllBalances",
